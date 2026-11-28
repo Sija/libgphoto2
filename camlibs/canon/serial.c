@@ -1062,6 +1062,7 @@ canon_serial_get_file (Camera *camera, const char *name, unsigned int *length, G
 		}
 		msg = canon_serial_recv_msg (camera, 0x1, 0x21, &len, context);
 	}
+	gp_context_progress_stop (context, id);
 	free (file);
 	file = NULL;
 	return NULL;
@@ -1487,6 +1488,10 @@ canon_serial_get_thumbnail (Camera *camera, const char *name, unsigned char **da
 	}
 
 
+	if (total_file_size < 20) {
+		GP_DEBUG ("ERROR: response of %i bytes is too short", total_file_size);
+		return GP_ERROR;
+	}
 	total = le32atoh (msg + 4);
 	if (total > 2000000) {	/* 2 MB thumbnails ? unlikely ... */
 		gp_context_error (context, _("ERROR: %d is too big"), total);
@@ -1497,35 +1502,38 @@ canon_serial_get_thumbnail (Camera *camera, const char *name, unsigned char **da
 		perror ("malloc");
 		return GP_ERROR;
 	}
-	*length = total;
 
 	id = gp_context_progress_start (context, total, _("Getting thumbnail..."));
 	while (msg) {
 		if (total_file_size < 20 || le32atoh (msg)) {
-			return GP_ERROR;
+			break;
 		}
 		size = le32atoh (msg + 12);
 		if (le32atoh (msg + 8) != expect || expect + size > total
 		    || size > total_file_size - 20) {
 			GP_DEBUG ("ERROR: doesn't fit");
-			return GP_ERROR;
+			break;
 		}
 		memcpy (*data + expect, msg + 20, size);
 		expect += size;
 		gp_context_progress_update (context, id, expect);
 		if ((expect == total) != le32atoh (msg + 16)) {
 			GP_DEBUG ("ERROR: end mark != end of data");
-			return GP_ERROR;
+			break;
 		}
 		if (expect == total) {
 			/* We finished receiving the file. Parse the header and
 			   return just the thumbnail */
-			break;
+			gp_context_progress_stop (context, id);
+			*length = total;
+			return GP_OK;
 		}
 		msg = canon_serial_recv_msg (camera, 0x1, 0x21, &total_file_size, context);
 	}
 	gp_context_progress_stop (context, id);
-	return GP_OK;
+	free (*data);
+	*data = NULL;
+	return GP_ERROR;
 }
 
 /****************************************************************************
