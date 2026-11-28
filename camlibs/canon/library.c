@@ -514,7 +514,10 @@ canon_int_switch_camera_off (Camera *camera, GPContext *context)
 static int
 camera_exit (Camera *camera, GPContext *context)
 {
-	int res = 0;
+	int res = GP_OK;
+
+	if (!camera->pl)
+		return GP_OK;
 
 	if (camera->port->type == GP_PORT_USB)
 		canon_usb_unlock_keys (camera, context);
@@ -525,16 +528,17 @@ camera_exit (Camera *camera, GPContext *context)
 	if (camera->pl->remote_control) {
 		res = canon_int_end_remote_control (camera, context);
 		if (res != GP_OK)
-			return -1;
+			GP_DEBUG ("camera_exit: could not end remote control: %s",
+				  gp_result_as_string (res));
 	}
 
-	if (camera->pl) {
-		canon_int_switch_camera_off (camera, context);
-		free (camera->pl);
-		camera->pl = NULL;
-	}
+	canon_int_switch_camera_off (camera, context);
+	free (camera->pl->cached_drive);
+	free (camera->pl->directory_state);
+	free (camera->pl);
+	camera->pl = NULL;
 
-	return GP_OK;
+	return res;
 }
 
 /**
