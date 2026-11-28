@@ -1279,6 +1279,24 @@ canon_int_capture_preview (Camera *camera, unsigned char **data, unsigned int *l
         return GP_OK;
 }
 
+/*
+ * Returns the length of the directory entry at @entry, or 0 if the
+ * entry, including the terminating NUL byte of its name, does not fit
+ * in the data ending at @end.
+ */
+static size_t
+canon_dirent_length (const char *entry, const char *end)
+{
+        const char *nul;
+
+        if (entry > end || end - entry < CANON_MINIMUM_DIRENT_SIZE)
+                return 0;
+        nul = memchr (entry + CANON_DIRENT_NAME, 0, end - entry - CANON_DIRENT_NAME);
+        if (nul == NULL)
+                return 0;
+        return nul + 1 - entry;
+}
+
 /**
  * canon_int_find_new_image:
  * @camera: Camera * to this camera
@@ -1301,6 +1319,10 @@ void canon_int_find_new_image (
 		CameraFilePath *path )
 {
         char *old_entry = (char *)initial_state, *new_entry = (char *)final_state;
+        const char *old_end = old_entry + initial_state_length;
+        const char *new_end = new_entry + final_state_length;
+        const char *gphoto_folder;
+        size_t old_length, new_length;
 
         /* Set default path name */
         strncpy ( path->name, _("*UNKNOWN*"), sizeof(path->name) );
@@ -1308,8 +1330,8 @@ void canon_int_find_new_image (
 
         path->folder[0] = 0; /* Start with null pathname string. */
         GP_DEBUG ( "canon_int_find_new_image: starting directory compare" );
-        while ( (((new_entry - (char*)final_state) < final_state_length) &&
-		((old_entry - (char*)initial_state) < initial_state_length)) &&
+        while ( (new_length = canon_dirent_length ( new_entry, new_end )) != 0 &&
+		(old_length = canon_dirent_length ( old_entry, old_end )) != 0 &&
 		(	le16atoh ( old_entry + CANON_DIRENT_ATTRS ) != 0 ||
 			le32atoh ( old_entry + CANON_DIRENT_SIZE ) != 0 ||
 			le32atoh ( old_entry + CANON_DIRENT_TIME ) != 0
@@ -1336,8 +1358,13 @@ void canon_int_find_new_image (
                         if ( is_image ( new_name ) ) {
                                 /* Yup, we'll assume that this is the new image. */
                                 GP_DEBUG ( "  Found our new image file" );
-                                strncpy ( path->name, new_name, sizeof(path->name) );
-                                strncpy ( path->folder, canon2gphotopath ( camera, path->folder ), sizeof(path->folder) );
+                                strncpy ( path->name, new_name, sizeof(path->name) - 1 );
+                                path->name[sizeof(path->name) - 1] = 0;
+                                gphoto_folder = canon2gphotopath ( camera, path->folder );
+                                if ( gphoto_folder == NULL )
+                                        gphoto_folder = "";
+                                strncpy ( path->folder, gphoto_folder, sizeof(path->folder) - 1 );
+                                path->folder[sizeof(path->folder) - 1] = 0;
 
 				/* FIXME: Marcus: make it less large effort... */
 				gp_filesystem_reset (camera->fs);
@@ -1370,16 +1397,16 @@ void canon_int_find_new_image (
                                 if ( le16atoh ( new_entry+CANON_DIRENT_ATTRS ) & CANON_ATTR_RECURS_ENT_DIR ) {
                                         if ( !strcmp ( "..", new_name ) ) {
                                                 /* Pop out of this directory */
-                                                char *local_dir = strrchr(path->folder,'\\') + 1;
+                                                char *local_dir = strrchr(path->folder,'\\');
                                                 /* The EOS 350D has
                                                  * ".." entries right
                                                  * up to the root, so
                                                  * we need to avoid
                                                  * dereferencing a
                                                  * null pointer. */
-                                                if ( local_dir != NULL && local_dir > path->folder ) {
-                                                        GP_DEBUG ( "Leaving directory \"%s\"", local_dir );
-                                                        local_dir[-1] = 0;
+                                                if ( local_dir != NULL ) {
+                                                        GP_DEBUG ( "Leaving directory \"%s\"", local_dir + 1 );
+                                                        *local_dir = 0;
                                                 }
                                                 else
                                                         GP_DEBUG ( "Leaving top directory" );
@@ -1398,7 +1425,7 @@ void canon_int_find_new_image (
                                                                   sizeof(path->folder) - strlen(path->folder) - 1 );
                                         }
                                 }
-                                new_entry += CANON_MINIMUM_DIRENT_SIZE + strlen ( new_entry+CANON_DIRENT_NAME );
+                                new_entry += new_length;
                         }
                 }
                 else {
@@ -1410,16 +1437,16 @@ void canon_int_find_new_image (
                                    time, and name "..". */
                                 if ( !strcmp ( "..", old_name ) ) {
                                         /* Pop out of this directory */
-                                        char *local_dir = strrchr(path->folder,'\\') + 1;
+                                        char *local_dir = strrchr(path->folder,'\\');
                                         /* The EOS 350D has
                                          * ".." entries right
                                          * up to the root, so
                                          * we need to avoid
                                          * dereferencing a
                                          * null pointer. */
-                                        if ( local_dir != NULL && local_dir > path->folder ) {
-                                                GP_DEBUG ( "Leaving directory \"%s\"", local_dir );
-                                                local_dir[-1] = 0;
+                                        if ( local_dir != NULL ) {
+                                                GP_DEBUG ( "Leaving directory \"%s\"", local_dir + 1 );
+                                                *local_dir = 0;
                                         }
                                         else
                                                 GP_DEBUG ( "Leaving top directory" );
@@ -1438,8 +1465,8 @@ void canon_int_find_new_image (
                                 }
                         }
                         /* Move to next entry */
-                        new_entry += CANON_MINIMUM_DIRENT_SIZE + strlen ( new_entry+CANON_DIRENT_NAME );
-                        old_entry += CANON_MINIMUM_DIRENT_SIZE + strlen ( old_entry+CANON_DIRENT_NAME );
+                        new_entry += new_length;
+                        old_entry += old_length;
                 }
         }
 }
@@ -3026,13 +3053,13 @@ canon2gphotopath (Camera __unused__ *camera, const char *path)
         static char tmp[2000];
         char *p;
 
-        if (!((path[1] == ':') && (path[2] == '\\'))) {
+        if (!(path[0] && (path[1] == ':') && (path[2] == '\\'))) {
                 GP_DEBUG ("canon2gphotopath called on invalid canon path '%s'", path);
                 return NULL;
         }
 
-        /* 3 is D: plus NULL byte */
-        if (strlen (path) - 3 > sizeof (tmp)) {
+        /* the drive name "D:" is dropped, the NUL byte has to fit too */
+        if (strlen (path + 2) >= sizeof (tmp)) {
                 GP_DEBUG ("canon2gphotopath called on too long canon path (%li bytes): %s",
                           (long)(strlen (path)), path);
                 return NULL;
