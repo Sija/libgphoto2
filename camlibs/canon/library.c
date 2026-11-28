@@ -1989,8 +1989,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 
 	GP_DEBUG ("camera_set_config()");
 
-	gp_widget_get_child_by_label (window, _("Owner Name"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Owner Name"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2003,8 +2003,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 		}
 	}
 
-	gp_widget_get_child_by_label (window, _("Capture Size Class"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Capture Size Class"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 
@@ -2027,11 +2027,11 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	if (!camera->pl->remote_control) {
 		res = canon_int_start_remote_control (camera, context);
 		if (res != GP_OK)
-			return -1;
+			return res;
 	}
 
-	gp_widget_get_child_by_label (window, _("ISO Speed"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("ISO Speed"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2060,8 +2060,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	}
 
 
-	gp_widget_get_child_by_label (window, _("Shooting mode"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Shooting mode"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2090,8 +2090,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	}
 
 
-	gp_widget_get_child_by_label (window, _("Shutter Speed"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Shutter Speed"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2119,8 +2119,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 		}
 	}
 
-	gp_widget_get_child_by_label (window, _("Aperture"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Aperture"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2147,8 +2147,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 			}
 		}
 	}
-	gp_widget_get_child_by_label (window, _("Exposure Compensation"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Exposure Compensation"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		unsigned char expbias;
 
 		gp_widget_set_changed (w, 0);
@@ -2178,8 +2178,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 		}
 	}
 
-	gp_widget_get_child_by_label (window, _("Image Format"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Image Format"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2207,8 +2207,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 		}
 	}
 
-	gp_widget_get_child_by_label (window, _("Focus Mode"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Focus Mode"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2237,8 +2237,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	}
 
 	/* Beep */
-	gp_widget_get_child_by_label (window, _("Beep"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Beep"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2270,8 +2270,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	/* DSLRs have only "Manual" Zoom */
 	if (camera->pl->md->id_str && !strstr(camera->pl->md->id_str, "EOS") && !strstr(camera->pl->md->id_str, "Rebel")) {
 		/* Zoom */
-		gp_widget_get_child_by_label (window, _("Zoom"), &w);
-		if (gp_widget_changed (w)) {
+		if (gp_widget_get_child_by_label (window, _("Zoom"), &w) == GP_OK &&
+		    gp_widget_changed (w)) {
 			float zoom;
 
 			gp_widget_set_changed (w, 0);
@@ -2288,8 +2288,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	}
 
 	/* Aperture */
-	gp_widget_get_child_by_label (window, _("Aperture"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Aperture"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2318,8 +2318,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	}
 
 	/* Flash mode */
-	gp_widget_get_child_by_label (window, _("Flash Mode"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Flash Mode"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2348,8 +2348,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	}
 
 
-	gp_widget_get_child_by_label (window, _("Synchronize camera date and time with PC"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Synchronize camera date and time with PC"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &wvalue);
 		if (!check_readiness (camera, context)) {
@@ -2363,8 +2363,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 		}
 	}
 
-	gp_widget_get_child_by_label (window, _("List all files"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("List all files"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		/* XXXXX mark CameraFS as dirty */
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &val);
@@ -2377,8 +2377,8 @@ camera_set_config (Camera *camera, CameraWidget *window, GPContext *context)
 	}
 
 #ifdef CANON_EXPERIMENTAL_UPLOAD
-	gp_widget_get_child_by_label (window, _("Keep filename on upload"), &w);
-	if (gp_widget_changed (w)) {
+	if (gp_widget_get_child_by_label (window, _("Keep filename on upload"), &w) == GP_OK &&
+	    gp_widget_changed (w)) {
 		gp_widget_set_changed (w, 0);
 		gp_widget_get_value (w, &camera->pl->upload_keep_filename);
 		GP_DEBUG ("New config value for \"Keep filename on upload\": %i",
