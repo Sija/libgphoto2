@@ -686,10 +686,17 @@ canon_serial_recv_msg (Camera *camera, unsigned char mtype, unsigned char dir, u
 				return NULL;
 			}
 			if (msg_pos + len > msg_size || !msg) {
-				msg_size *= 2;
-				msg = realloc (msg, msg_size);
-				if (!msg)
+				unsigned char *new_msg;
+				int new_size = msg_size;
+
+				do
+					new_size *= 2;
+				while (msg_pos + len > new_size);
+				new_msg = realloc (msg, new_size);
+				if (!new_msg)
 					return NULL;
+				msg = new_msg;
+				msg_size = new_size;
 			}
 			memcpy (msg + msg_pos, frag, len);
 			msg_pos += len;
