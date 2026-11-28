@@ -714,6 +714,7 @@ get_file_func (CameraFilesystem *fs, const char *folder, const char *filename,
 	unsigned char *data = NULL, *thumbdata = NULL;
 	const char *thumbname = NULL;
 	const char *audioname = NULL;
+	const char *canonfolder;
 	int ret;
 	unsigned int datalen;
 	char canon_path[300];
@@ -723,9 +724,12 @@ get_file_func (CameraFilesystem *fs, const char *folder, const char *filename,
 	char buf[32];
 
 	/* Assemble complete canon path into canon_path */
+	canonfolder = gphoto2canonpath (camera, folder, context);
+	if (canonfolder == NULL)
+		return GP_ERROR_BAD_PARAMETERS;
 	ret = snprintf (canon_path, sizeof (canon_path) - 3, "%s\\%s",
-			gphoto2canonpath (camera, folder, context), filename);
-	if (ret < 0) {
+			canonfolder, filename);
+	if (ret < 0 || ret >= (int)sizeof (canon_path) - 3) {
 		gp_context_error (context,
 				  _("Internal error #1 in get_file_func() (%s line %i)"),
 				  __FILE__, __LINE__);
@@ -771,18 +775,21 @@ get_file_func (CameraFilesystem *fs, const char *folder, const char *filename,
 				 */
 				CameraFileInfo info;
 
-				gp_filesystem_get_info (fs, folder, filename, &info, context);
-				if ((info.file.permissions & GP_FILE_PERM_DELETE) == 0)
-					attr |= CANON_ATTR_WRITE_PROTECTED;
-				canon_int_set_file_attributes (camera, filename,
-							       gphoto2canonpath (camera,
-										 folder,
-										 context),
-							       attr, context);
+				/* without the file information we would not know
+				 * whether to keep the file write protected */
+				if (gp_filesystem_get_info (fs, folder, filename, &info, context) == GP_OK) {
+					if ((info.file.permissions & GP_FILE_PERM_DELETE) == 0)
+						attr |= CANON_ATTR_WRITE_PROTECTED;
+					canonfolder = gphoto2canonpath (camera, folder, context);
+					if (canonfolder != NULL)
+						canon_int_set_file_attributes (camera, filename,
+									       canonfolder,
+									       attr, context);
 
-				/* we cannot easily retrieve it except by reading the directory */
-				if (info.file.fields & GP_FILE_INFO_MTIME)
-					gp_file_set_mtime (file, info.file.mtime);
+					/* we cannot easily retrieve it except by reading the directory */
+					if (info.file.fields & GP_FILE_INFO_MTIME)
+						gp_file_set_mtime (file, info.file.mtime);
+				}
 			}
 			break;
 
@@ -879,6 +886,7 @@ get_file_func (CameraFilesystem *fs, const char *folder, const char *filename,
 	if (datalen < 256) {
 		GP_DEBUG ("get_file_func: datalen < 256 (datalen = %i = 0x%x)", datalen,
 			  datalen);
+		free (data);
 		return GP_ERROR_CORRUPTED_DATA;
 	}
 
@@ -1146,6 +1154,8 @@ delete_file_func (CameraFilesystem __unused__ *fs, const char *folder,
 	GP_DEBUG ("delete_file_func()");
 
 	_canonfolder = gphoto2canonpath (camera, folder, context);
+	if (_canonfolder == NULL || strlen (_canonfolder) >= sizeof (canonfolder))
+		return GP_ERROR_BAD_PARAMETERS;
 	strncpy (canonfolder, _canonfolder, sizeof (canonfolder) - 1);
 	canonfolder[sizeof (canonfolder) - 1] = 0;
 
