@@ -4045,6 +4045,13 @@ canon_int_extract_jpeg_thumb (unsigned char *data, const unsigned int datalen,
         *retdata = NULL;
         *retdatalen = 0;
 
+        if (datalen < 10) {
+                gp_context_error (context, _("Could not extract JPEG "
+                                             "thumbnail from data: Data is too short"));
+                GP_DEBUG ("canon_int_extract_jpeg_thumb: only %i bytes of data", datalen);
+                return GP_ERROR_CORRUPTED_DATA;
+        }
+
         if (data[0] == JPEG_ESC || data[1] == JPEG_BEG) {
                 GP_DEBUG ("canon_int_extract_jpeg_thumb: this is a JFIF file.");
 
@@ -4086,7 +4093,7 @@ canon_int_extract_jpeg_thumb (unsigned char *data, const unsigned int datalen,
                 memcpy (*retdata, data + thumbstart, thumbsize);
                 *retdatalen = thumbsize;
         }
-        else if ( !strcmp ( (char *)data, "II*" ) && data[8] == 'C' && data[9] == 'R' ) {
+        else if ( !memcmp ( data, "II*\0", 4 ) && data[8] == 'C' && data[9] == 'R' ) {
 
                 /* This is a valid EXIF file; we need to sort through
                  * to get the JPEG thumbnail. */
@@ -4101,19 +4108,29 @@ canon_int_extract_jpeg_thumb (unsigned char *data, const unsigned int datalen,
                  * JPEG thumbnail and just fetch the thumbnail to get
                  * the EXIF data. */
                 unsigned int n_tags;
-                int ifd0_offset, ifd1_offset;
-                int jpeg_offset = -1, jpeg_size = -1;
+                unsigned int ifd0_offset, ifd1_offset;
+                unsigned int jpeg_offset = 0, jpeg_size = 0;
+                int have_jpeg_offset = 0, have_jpeg_size = 0;
 
                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: this is from a CR2 file.");
-                dump_hex ( stderr, data, 32 );
+                dump_hex ( stderr, data, datalen < 32 ? datalen : 32 );
                 ifd0_offset = exif_get_long ( data+4, EXIF_BYTE_ORDER_INTEL );
                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: IFD 0 at 0x%x", ifd0_offset );
+                if ( ifd0_offset > datalen - 2 )
+                        goto cr2_corrupted;
                 n_tags = exif_get_short ( data+ifd0_offset, EXIF_BYTE_ORDER_INTEL );
                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: %d tags in IFD 0", n_tags );
+                /* the IFD is followed by the 4 byte offset of the next one */
+                if ( 12*n_tags + 4 > datalen - 2 - ifd0_offset )
+                        goto cr2_corrupted;
                 ifd1_offset = exif_get_long ( data + ifd0_offset + 2 + 12*n_tags, EXIF_BYTE_ORDER_INTEL );
                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: IFD 1 at 0x%x", ifd1_offset );
+                if ( ifd1_offset > datalen - 2 )
+                        goto cr2_corrupted;
                 n_tags = exif_get_short ( data+ifd1_offset, EXIF_BYTE_ORDER_INTEL );
                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: %d tags in IFD 1", n_tags );
+                if ( 12*n_tags > datalen - 2 - ifd1_offset )
+                        goto cr2_corrupted;
 
                 /* Now go through IFD 1 and find the two tags we need. */
                 for ( i=0; i<n_tags; i++ ) {
@@ -4124,11 +4141,13 @@ canon_int_extract_jpeg_thumb (unsigned char *data, const unsigned int datalen,
                         switch ( tag ) {
                         case EXIF_TAG_JPEG_INTERCHANGE_FORMAT_LENGTH:
                                 jpeg_size = exif_get_long ( entry + 8, EXIF_BYTE_ORDER_INTEL );
+                                have_jpeg_size = 1;
                                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: JPEG length is %d",
                                            jpeg_size );
                                 break;
                         case EXIF_TAG_JPEG_INTERCHANGE_FORMAT:
                                 jpeg_offset = exif_get_long ( entry + 8, EXIF_BYTE_ORDER_INTEL );
+                                have_jpeg_offset = 1;
                                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: JPEG offset is 0x%x",
                                            jpeg_offset );
                                 break;
@@ -4136,20 +4155,38 @@ canon_int_extract_jpeg_thumb (unsigned char *data, const unsigned int datalen,
                                 break;
                         }
                 }
-                if ( jpeg_size < 0 || jpeg_offset < 0 ) {
+                if ( !have_jpeg_size || !have_jpeg_offset ) {
                         GP_DEBUG ( "canon_int_extract_jpeg_thumb: "
-                                   "missing a required tag: length=%d, offset=%d",
-                                   jpeg_size, jpeg_offset );
+                                   "missing a required tag: length=%s, offset=%s",
+                                   have_jpeg_size ? "found" : "missing",
+                                   have_jpeg_offset ? "found" : "missing" );
+                        return GP_ERROR_CORRUPTED_DATA;
+                }
+                if ( jpeg_size == 0 || jpeg_offset > datalen || jpeg_size > datalen - jpeg_offset ) {
+                        GP_DEBUG ( "canon_int_extract_jpeg_thumb: "
+                                   "JPEG image of %u bytes at 0x%x does not fit in %u bytes of data",
+                                   jpeg_size, jpeg_offset, datalen );
                         return GP_ERROR_CORRUPTED_DATA;
                 }
 
                 /* Now we should have enough to extract the thumbnail. */
                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: %d bytes of JPEG image",
                             jpeg_size );
+                *retdata = malloc ( jpeg_size );
+                if ( !*retdata ) {
+                        GP_DEBUG ( "canon_int_extract_jpeg_thumb: could not allocate %u bytes of memory",
+                                   jpeg_size );
+                        return GP_ERROR_NO_MEMORY;
+                }
+                memcpy ( *retdata, data + jpeg_offset, jpeg_size );
                 *retdatalen = jpeg_size;
-                *retdata = malloc ( *retdatalen );
-                memcpy ( *retdata, data + jpeg_offset, *retdatalen );
-                dump_hex ( stderr, *retdata, 32 );
+                dump_hex ( stderr, *retdata, jpeg_size < 32 ? jpeg_size : 32 );
+                return GP_OK;
+
+        cr2_corrupted:
+                GP_DEBUG ( "canon_int_extract_jpeg_thumb: IFD does not fit in %u bytes of data",
+                           datalen );
+                return GP_ERROR_CORRUPTED_DATA;
 #else /* HAVE_LIBEXIF */
                 GP_DEBUG ( "canon_int_extract_jpeg_thumb: Can't grok thumbnail from a CR2 file without libexif");
                 return GP_ERROR_NOT_SUPPORTED;
