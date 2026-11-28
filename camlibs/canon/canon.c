@@ -3600,10 +3600,11 @@ canon_int_delete_file (Camera *camera, const char *name, const char *dir, GPCont
 
         switch (camera->port->type) {
                 case GP_PORT_USB:
-                        memcpy (payload, dir, strlen (dir) + 1);
+                        memset (payload, 0, sizeof (payload));
                         if ( camera->pl->md->model == CANON_CLASS_6 ) {
-                                char *ptr = (char *)payload + strlen(dir);
-                                char last_byte = dir[strlen(dir)-1];
+                                size_t dir_len = strlen (dir), name_len = strlen (name);
+                                int separator = dir_len == 0 ||
+                                        (dir[dir_len - 1] != '\\' && dir[dir_len - 1] != '/');
                                 /* Newer protocol uses a different
                                  * code and has different parameters:
                                  * - full path name together, rather than directory and file
@@ -3612,19 +3613,31 @@ canon_int_delete_file (Camera *camera, const char *name, const char *dir, GPCont
                                  *   payload
                                  * - directory name (again)
                                  * - 2 null bytes */
-                                if ( last_byte != '\\' && last_byte != '/' )
-                                        *ptr++ = '\\'; /* Need path separator between */
-                                memcpy ( ptr, name, 0x30 - strlen(dir) - 1 );
+                                if ( dir_len + separator + name_len >= 0x30 ) {
+                                        GP_DEBUG ( "canon_int_delete_file: "
+                                                   "path '%s' '%s' too long", dir, name );
+                                        return GP_ERROR_BAD_PARAMETERS;
+                                }
+                                memcpy (payload, dir, dir_len);
+                                if ( separator )
+                                        payload[dir_len] = '\\'; /* Need path separator between */
+                                memcpy ( payload + dir_len + separator, name, name_len );
 
-                                memcpy ( payload + 0x30, dir, 0x30 );
-                                payload_length = 0x30 + strlen(dir);
-                                if ( last_byte != '\\' && last_byte != '/' )
+                                memcpy ( payload + 0x30, dir, dir_len );
+                                payload_length = 0x30 + dir_len;
+                                if ( separator )
                                         payload[payload_length++] = '\\'; /* Need path separator at end of directory name */
 
                                 msg = canon_usb_dialogue (camera, CANON_USB_FUNCTION_DELETE_FILE_2, &len,
                                                           payload, payload_length);
                         }
                         else {
+                                if ( strlen (dir) + strlen (name) + 3 > sizeof (payload) ) {
+                                        GP_DEBUG ( "canon_int_delete_file: "
+                                                   "path '%s' '%s' too long", dir, name );
+                                        return GP_ERROR_BAD_PARAMETERS;
+                                }
+                                memcpy (payload, dir, strlen (dir) + 1);
                                 memcpy (payload + strlen (dir) + 1, name, strlen (name) + 1);
                                 payload_length = strlen (dir) + strlen (name) + 2;
                                 payload[payload_length++] = 0; /* Double NUL to end command */
