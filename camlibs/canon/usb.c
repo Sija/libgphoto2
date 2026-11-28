@@ -1707,10 +1707,6 @@ canon_usb_long_dialogue (Camera *camera, canonCommandIndex canon_funct, unsigned
 
         total_data_size = le32atoh (lpacket + 0x6);
 
-        if (display_status)
-                id = gp_context_progress_start (context, total_data_size,
-                                                _("Receiving data..."));
-
         if (max_data_size && (total_data_size > max_data_size)) {
                 GP_DEBUG ("canon_usb_long_dialogue: ERROR: Packet of size %i is too big "
                           "(max reasonable size specified is %i)", total_data_size,
@@ -1723,6 +1719,10 @@ canon_usb_long_dialogue (Camera *camera, canonCommandIndex canon_funct, unsigned
                           "ERROR: Could not allocate %i bytes of memory", total_data_size);
                 return GP_ERROR_NO_MEMORY;
         }
+
+        if (display_status)
+                id = gp_context_progress_start (context, total_data_size,
+                                                _("Receiving data..."));
 
         bytes_received = 0;
         while (bytes_received < total_data_size) {
@@ -1745,6 +1745,8 @@ canon_usb_long_dialogue (Camera *camera, canonCommandIndex canon_funct, unsigned
                                   bytes_read);
                         free (*data);
                         *data = NULL;
+                        if (display_status)
+                                gp_context_progress_stop (context, id);
 
                         /* here, it is an error to get 0 bytes from gp_port_read()
                          * too, but 0 is GP_OK so if bytes_read is 0 return GP_ERROR_CORRUPTED_DATA
@@ -2136,6 +2138,11 @@ canon_usb_set_file_attributes (Camera *camera, unsigned int attr_bits,
         unsigned char *res;
 
         GP_DEBUG ( "canon_usb_set_file_attributes()" );
+        if ( payload == NULL ) {
+                gp_context_error (context, _("Out of memory: %d bytes needed."),
+                                  payload_length );
+                return GP_ERROR_NO_MEMORY;
+        }
         GP_DEBUG ( "canon_usb_set_file_attributes(): payload is %d=0x%x bytes; string length is %d=0x%x",
                    payload_length, payload_length, (int)strlen(dir), (int)strlen(dir) );
         /* build payload :
@@ -2513,6 +2520,7 @@ canon_usb_list_all_dirs (Camera *camera, unsigned char **dirent_data,
                                   _("canon_usb_list_all_dirs: "
 				    "Couldn't fit payload into buffer, "
 				    "'%.96s' (truncated) too long."), disk_name);
+                free ( disk_name );
                 return GP_ERROR_BAD_PARAMETERS;
         }
         memset (payload, 0x00, sizeof (payload));
