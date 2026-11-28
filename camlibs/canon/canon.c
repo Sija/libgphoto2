@@ -872,7 +872,13 @@ canon_int_pack_control_subcmd (unsigned char *payload, unsigned int subcmd,
         }
 
         sprintf (desc, "%s", canon_usb_control_cmd[i].description);
+        /* some subcommands have no known length (yet), they cannot be sent */
         paysize = canon_usb_control_cmd[i].cmd_length - 0x10;
+        if (paysize < 0x04) {
+                GP_DEBUG ("canon_int_pack_control_subcmd: length of subcommand %s unknown",
+                          canon_usb_control_cmd[i].description);
+                return 0;
+        }
         memset (payload, 0, paysize);
         if (paysize >= 0x04) htole32a(payload,     canon_usb_control_cmd[i].subcmd);
         if (paysize >= 0x08) htole32a(payload+0x4, word0);
@@ -907,6 +913,8 @@ canon_int_do_control_command (Camera *camera, unsigned int subcmd, int a, int b)
 
         payloadlen = canon_int_pack_control_subcmd(payload, subcmd,
                                                    a, b, desc);
+        if ( payloadlen == 0 )
+                return GP_ERROR_NOT_SUPPORTED;
         GP_DEBUG("%s++ with %x, %x", desc, a, b);
 
         if ( camera->pl->md->model == CANON_CLASS_6 ) {
@@ -1021,6 +1029,8 @@ canon_int_do_control_dialogue (Camera *camera, unsigned int subcmd, int a, int b
 
         payloadlen = canon_int_pack_control_subcmd (payload, subcmd,
                                                     a, b, desc);
+        if ( payloadlen == 0 )
+                return GP_ERROR_NOT_SUPPORTED;
         GP_DEBUG("%s++ with %x, %x", desc, a, b);
 
         status = canon_int_do_control_dialogue_payload (camera, payload,
