@@ -1529,6 +1529,12 @@ canon_usb_dialogue_full (Camera *camera, canonCommandIndex canon_funct, unsigned
                         GP_DEBUG ("canon_usb_dialogue_full: camera reports 0x%x bytes (0x%x total)",
                                   reported_length, reported_length+0x40 );
 
+                        if ( reported_length > sizeof (buffer) - 0x40 ) {
+                                GP_DEBUG ("canon_usb_dialogue_full: camera reports 0x%x bytes, "
+                                          "which won't fit in buffer of size %li!",
+                                          reported_length, (long)sizeof (buffer));
+                                return NULL;
+                        }
                         if ( reported_length > 0 && reported_length+0x40 != read_bytes ) {
                                 gp_log (GP_LOG_DEBUG, "canon/usb.c",
 					"canon_usb_dialogue:"
@@ -1622,17 +1628,23 @@ canon_usb_dialogue (Camera *camera, canonCommandIndex canon_funct, unsigned int 
                     unsigned int payload_length)
 {
 	unsigned char *buffer;
+	unsigned int length = 0;
 
-	buffer = canon_usb_dialogue_full (camera, canon_funct, return_length,
+	buffer = canon_usb_dialogue_full (camera, canon_funct, &length,
 					  payload, payload_length);
-
-	/* Remove the packet header from the response */
 	if (return_length)
-		*return_length = *return_length - 0x50;
-	if (buffer)
-		return buffer + 0x50;
-	else
+		*return_length = 0;
+	if (!buffer)
 		return NULL;
+
+	/* Remove the packet header from the response. Some remote
+	 * control subcommands return no data beyond the 0x40 bytes
+	 * read, which is shorter than the header: report no data
+	 * then (the buffer of canon_usb_dialogue_full() is large
+	 * enough and cleared, so the data pointer stays valid). */
+	if (return_length && length > 0x50)
+		*return_length = length - 0x50;
+	return buffer + 0x50;
 }
 
 
