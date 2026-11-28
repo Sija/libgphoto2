@@ -683,18 +683,27 @@ canon_int_identify_camera (Camera *camera, GPContext *context)
                 GP_DEBUG ("canon_int_identify_camera: Unexpected length returned "
                           "(expected %i got %i); continuing.", 0x4c, len);
         }
+        if (len < 12) {
+                GP_DEBUG ("canon_int_identify_camera: response of %i bytes is too short", len);
+                return GP_ERROR_CORRUPTED_DATA;
+        }
 
         /* Store these values in our "camera" structure: */
         memcpy (camera->pl->firmwrev, (char *) msg + 8, 4);
-        strncpy (camera->pl->ident, (char *) msg + 12, 32);
+        /* the precision keeps snprintf() from reading past the response,
+         * which does not necessarily terminate the strings */
+        snprintf (camera->pl->ident, sizeof (camera->pl->ident), "%.*s",
+                  (int)(len - 12), (char *) msg + 12);
         if ( camera->pl->md->model != CANON_CLASS_6 )
-                strncpy (camera->pl->owner, (char *) msg + 44, 32);
+                snprintf (camera->pl->owner, sizeof (camera->pl->owner), "%.*s",
+                          len > 44 ? (int)(len - 44) : 0, (char *) msg + 44);
         else {
                 /* Need to get owner explicitly. */
                 msg = canon_usb_dialogue ( camera, CANON_USB_FUNCTION_GET_OWNER, &len, NULL, 0 );
                 if ( msg == NULL )
                         return GP_ERROR_OS_FAILURE;
-                strncpy (camera->pl->owner, (char *) msg + 4, 32);
+                snprintf (camera->pl->owner, sizeof (camera->pl->owner), "%.*s",
+                          len > 4 ? (int)(len - 4) : 0, (char *) msg + 4);
         }
 
 
