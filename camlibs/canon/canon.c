@@ -1137,6 +1137,9 @@ canon_int_capture_preview (Camera *camera, unsigned char **data, unsigned int *l
 
         int photo_status;
 
+        *data = NULL;
+        *length = 0;
+
         /* Should we download the thumbnail, or the full image ? */
         if (camera->pl->capture_size == CAPTURE_FULL_IMAGE)
                 transfermode = REMOTE_CAPTURE_FULL_TO_PC;
@@ -1213,8 +1216,10 @@ canon_int_capture_preview (Camera *camera, unsigned char **data, unsigned int *l
                    Can't use normal "canon_int_do_control_command", as
                    we must read the interrupt pipe before the response
                    comes back for this command. */
-                *data = canon_usb_capture_dialogue ( camera, &return_length, &photo_status, context );
-                if ( *data == NULL ) {
+                /* The response points into a static buffer: it only tells
+                   whether the capture succeeded, the image is downloaded
+                   into @data below. */
+                if ( canon_usb_capture_dialogue ( camera, &return_length, &photo_status, context ) == NULL ) {
                         /* Try to leave camera in a usable state. */
                         canon_int_end_remote_control (camera, context);
 
@@ -1248,6 +1253,9 @@ canon_int_capture_preview (Camera *camera, unsigned char **data, unsigned int *l
                                 if ( status < 0 ) {
                                         GP_DEBUG ( "canon_int_capture_preview:"
                                                    " secondary image download failed, status= %i", status );
+                                        free (*data);
+                                        *data = NULL;
+                                        *length = 0;
                                         return status;
                                 }
 
@@ -1271,6 +1279,11 @@ canon_int_capture_preview (Camera *camera, unsigned char **data, unsigned int *l
 
                 }
 
+                if ( *data == NULL ) {
+                        GP_DEBUG ( "canon_int_capture_preview:"
+                                   " the camera reported no image to download" );
+                        return GP_ERROR_CORRUPTED_DATA;
+                }
                 break;
         case GP_PORT_SERIAL:
                 return GP_ERROR_NOT_SUPPORTED;
