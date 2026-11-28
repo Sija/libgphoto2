@@ -1129,7 +1129,7 @@ canon_serial_get_dirents (Camera *camera, unsigned char **dirent_data,
 	 * of this command, do not copy them
 	 */
 	memcpy (data, p + 5, (*dirents_length - 5));
-	total_size = *dirents_length;
+	total_size = *dirents_length - 5;
 
 	/* p[4] indicates this is not the last packet,
 	 * read additional packets until there are no more
@@ -1154,7 +1154,7 @@ canon_serial_get_dirents (Camera *camera, unsigned char **dirent_data,
 		/* the first five bytes is only for the RS232 implementation,
 		 * don't count them when checking dirent size
 		 */
-		if (*dirents_length - 5 < CANON_MINIMUM_DIRENT_SIZE) {
+		if (*dirents_length < 5 + CANON_MINIMUM_DIRENT_SIZE) {
 			gp_context_error (context,
 					  _("canon_serial_get_dirents: "
 					  "Truncated directory entry received"));
@@ -1213,6 +1213,7 @@ canon_serial_get_dirents (Camera *camera, unsigned char **dirent_data,
 	GP_DEBUG ("OK - this was last dirent");
 
 	*dirent_data = data;
+	*dirents_length = total_size;
 	return GP_OK;
 }
 
