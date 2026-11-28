@@ -3142,6 +3142,25 @@ debug_fileinfo (CameraFileInfo * info)
         GP_DEBUG ("</CameraFileInfo>");
 }
 
+/*
+ * Returns the offset of the local time from UTC, in seconds. The clock of
+ * the camera runs on local time, see canon_int_set_time().
+ */
+static long
+canon_local_utc_offset (void)
+{
+        time_t now = time (NULL);
+        struct tm *tm = localtime (&now);
+
+#ifdef HAVE_TM_GMTOFF
+        return tm ? tm->tm_gmtoff : 0;
+#else
+        /* localtime() sets timezone */
+        (void) tm;
+        return -timezone;
+#endif
+}
+
 /**
  * canon_int_list_directory:
  * @camera: Camera to access
@@ -3189,6 +3208,7 @@ canon_int_list_directory (Camera *camera, const char *folder, CameraList *list,
         unsigned int dirents_length;
         unsigned char *dirent_data = NULL;
         unsigned char *end_of_data, *temp_ch, *pos;
+        long utc_offset;
         const char *canonfolder = gphoto2canonpath (camera, folder, context);
         int list_files = ((flags & CANON_LIST_FILES) != 0);
         int list_folders = ((flags & CANON_LIST_FOLDERS) != 0);
@@ -3253,6 +3273,9 @@ canon_int_list_directory (Camera *camera, const char *folder, CameraList *list,
 
         /* we are now positioned at the first interesting dirent */
 
+        /* the offset does not change while reading the listing */
+        utc_offset = canon_local_utc_offset ();
+
         /* This is the main loop, for every directory entry returned */
         while (pos < end_of_data) {
                 int is_dir, is_file;
@@ -3263,8 +3286,6 @@ canon_int_list_directory (Camera *camera, const char *folder, CameraList *list,
                 size_t dirent_name_len; /* length of dirent_name */
                 size_t dirent_ent_size; /* size of dirent in octets */
                 uint32_t tmp_time;
-                time_t date;
-                struct tm *tm;
 
                 gp_log (GP_LOG_DATA, "canon/canon.c",
                         "canon_int_list_directory: "
@@ -3315,18 +3336,9 @@ canon_int_list_directory (Camera *camera, const char *folder, CameraList *list,
                 /* see canon_int_set_time() for timezone handling */
                 tmp_time = le32atoh (pos + CANON_DIRENT_TIME);
                 if (tmp_time != 0) {
-                        /* FIXME: I just want the tm_gmtoff/timezone info */
-                        date = time(NULL);
-                        tm   = localtime (&date);
-#ifdef HAVE_TM_GMTOFF
-                        dirent_time = tmp_time - tm->tm_gmtoff;
-                        GP_DEBUG ("canon_int_list_directory: converted %ld to UTC %ld (tm_gmtoff is %ld)",
-                                (long)tmp_time, (long)dirent_time, (long)tm->tm_gmtoff);
-#else
-                        dirent_time = tmp_time + timezone;
-                        GP_DEBUG ("canon_int_list_directory: converted %ld to UTC %ld (timezone is %ld)",
-                                (long)tmp_time, (long)dirent_time, (long)timezone);
-#endif
+                        dirent_time = tmp_time - utc_offset;
+                        GP_DEBUG ("canon_int_list_directory: converted %ld to UTC %ld (UTC offset is %ld)",
+                                (long)tmp_time, (long)dirent_time, utc_offset);
                 } else {
                         dirent_time = tmp_time;
                 }
@@ -3773,6 +3785,7 @@ canon_int_get_info_func (Camera *camera, const char *folder,
         unsigned int dirents_length;
         unsigned char *dirent_data = NULL;
         unsigned char *end_of_data, *temp_ch, *pos;
+        long utc_offset;
         const char *canonfolder = gphoto2canonpath (camera, folder, context);
 
         GP_DEBUG ("BEGIN canon_int_get_info_func() folder '%s' aka '%s' filename %s", folder, canonfolder, filename);
@@ -3832,6 +3845,9 @@ canon_int_get_info_func (Camera *camera, const char *folder,
 
         /* we are now positioned at the first interesting dirent */
 
+        /* the offset does not change while reading the listing */
+        utc_offset = canon_local_utc_offset ();
+
         /* This is the main loop, for every directory entry returned */
         while (pos < end_of_data) {
                 int is_dir, is_file;
@@ -3842,8 +3858,6 @@ canon_int_get_info_func (Camera *camera, const char *folder,
                 size_t dirent_name_len; /* length of dirent_name */
                 size_t dirent_ent_size; /* size of dirent in octets */
                 uint32_t tmp_time;
-                time_t date;
-                struct tm *tm;
 
                 gp_log (GP_LOG_DATA, "canon/canon.c",
                         "canon_int_get_info_func: "
@@ -3892,18 +3906,9 @@ canon_int_get_info_func (Camera *camera, const char *folder,
                 /* see canon_int_set_time() for timezone handling */
                 tmp_time = le32atoh (pos + CANON_DIRENT_TIME);
                 if (tmp_time != 0) {
-                        /* FIXME: I just want the tm_gmtoff/timezone info */
-                        date = time(NULL);
-                        tm   = localtime (&date);
-#ifdef HAVE_TM_GMTOFF
-                        dirent_time = tmp_time - tm->tm_gmtoff;
-                        GP_DEBUG ("canon_int_get_info_func: converted %ld to UTC %ld (tm_gmtoff is %ld)",
-                                (long)tmp_time, (long)dirent_time, (long)tm->tm_gmtoff);
-#else
-                        dirent_time = tmp_time + timezone;
-                        GP_DEBUG ("canon_int_get_info_func: converted %ld to UTC %ld (timezone is %ld)",
-                                (long)tmp_time, (long)dirent_time, (long)timezone);
-#endif
+                        dirent_time = tmp_time - utc_offset;
+                        GP_DEBUG ("canon_int_get_info_func: converted %ld to UTC %ld (UTC offset is %ld)",
+                                (long)tmp_time, (long)dirent_time, utc_offset);
                 } else {
                         dirent_time = tmp_time;
                 }
