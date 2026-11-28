@@ -1160,8 +1160,10 @@ canon_int_capture_preview (Camera *camera, unsigned char **data, unsigned int *l
                         gp_port_set_timeout (camera->port, 15000);
 
                         status = canon_int_start_remote_control (camera, context);
-                        if ( status < 0 )
+                        if ( status < 0 ) {
+                                gp_port_set_timeout (camera->port, mstimeout);
                                 return status;
+                        }
                 }
 
                 /*
@@ -1178,10 +1180,10 @@ canon_int_capture_preview (Camera *camera, unsigned char **data, unsigned int *l
                 status = canon_int_do_control_command (camera,
                                                        CANON_USB_CONTROL_SET_TRANSFER_MODE,
                                                        0x04, transfermode);
+                gp_port_set_timeout (camera->port, mstimeout);
                 if ( status < 0 )
                         return status;
 
-                gp_port_set_timeout (camera->port, mstimeout);
                 GP_DEBUG("canon_int_capture_preview: set camera port timeout back to %d seconds...", mstimeout / 1000 );
 
                 /* Get release parameters a couple of times, just to
@@ -1534,6 +1536,7 @@ canon_int_capture_image (Camera *camera, CameraFilePath *path,
                 if (!camera->pl->remote_control) {
                         status = canon_int_start_remote_control (camera, context);
                         if ( status < 0 ) {
+                                gp_port_set_timeout (camera->port, mstimeout);
 				free ( initial_state );
                                 return status;
 			}
@@ -1553,13 +1556,13 @@ canon_int_capture_image (Camera *camera, CameraFilePath *path,
                 status = canon_int_do_control_command (camera,
                                                        CANON_USB_CONTROL_SET_TRANSFER_MODE,
                                                        0x04, transfermode);
+                gp_port_set_timeout (camera->port, mstimeout);
                 if ( status < 0 ) {
                         canon_int_end_remote_control (camera, context);
 			free ( initial_state );
                         return status;
                 }
 
-                gp_port_set_timeout (camera->port, mstimeout);
                 GP_DEBUG("canon_int_capture_image: set camera port timeout back to %d seconds...", mstimeout / 1000 );
 
                 /* Get release parameters a couple of times, just to

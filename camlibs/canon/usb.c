@@ -1044,10 +1044,10 @@ canon_usb_capture_dialogue (Camera *camera, unsigned int *return_length, int *ph
                                               payload, 9 );
         }
 
+        gp_port_set_timeout (camera->port, mstimeout);
         if ( buffer == NULL )
                 return NULL;
 
-        gp_port_set_timeout (camera->port, mstimeout);
         GP_DEBUG("canon_usb_capture_dialogue:"
                  " set camera port timeout back to %d seconds...", mstimeout / 1000 );
 
