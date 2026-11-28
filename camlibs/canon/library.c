@@ -648,6 +648,7 @@ update_disk_cache (Camera *camera, GPContext *context)
 		return 1;
 	if (!check_readiness (camera, context))
 		return 0;
+	free (camera->pl->cached_drive);
 	camera->pl->cached_drive = canon_int_get_disk_name (camera, context);
 	if (!camera->pl->cached_drive) {
 		gp_context_error (context, _("Could not get disk name: %s"),
@@ -1087,6 +1088,10 @@ storage_info_func (
 	if (!check_readiness (camera, context))
 		return GP_ERROR_IO;
 
+	/* the cache is refreshed here; make update_disk_cache() fetch it
+	 * again should that fail */
+	camera->pl->cached_disk = 0;
+	free (camera->pl->cached_drive);
 	camera->pl->cached_drive = canon_int_get_disk_name (camera, context);
 	if (!camera->pl->cached_drive) {
 		gp_context_error (context, _("Could not get disk name: %s"),
@@ -1094,17 +1099,18 @@ storage_info_func (
 		return GP_ERROR_IO;
 	}
 	snprintf (root, sizeof (root), "%s\\", camera->pl->cached_drive);
-	canon_int_get_disk_name_info (camera, root, &camera->pl->cached_capacity,
-				    &camera->pl->cached_available, context);
+	if (canon_int_get_disk_name_info (camera, root, &camera->pl->cached_capacity,
+					  &camera->pl->cached_available, context) == GP_OK)
+		camera->pl->cached_disk = 1;
 
 	*sinfos = (CameraStorageInformation*) calloc (1, sizeof (CameraStorageInformation));
+	if (!*sinfos)
+		return GP_ERROR_NO_MEMORY;
 	*nrofsinfos = 1;
 	(*sinfos)->fields = GP_STORAGEINFO_BASE;
 	strcpy ((*sinfos)->basedir, "/");
-	if (camera->pl->cached_drive) {
-		(*sinfos)->fields = GP_STORAGEINFO_LABEL;
-		strcpy ((*sinfos)->basedir, camera->pl->cached_drive);
-	}
+	(*sinfos)->fields |= GP_STORAGEINFO_LABEL;
+	snprintf ((*sinfos)->label, sizeof ((*sinfos)->label), "%s", camera->pl->cached_drive);
 	(*sinfos)->fields |= GP_STORAGEINFO_MAXCAPACITY;
 	(*sinfos)->capacitykbytes = camera->pl->cached_capacity;
 	(*sinfos)->fields |= GP_STORAGEINFO_FREESPACEKBYTES;
