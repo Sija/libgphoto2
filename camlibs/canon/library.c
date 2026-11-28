@@ -1035,7 +1035,6 @@ camera_summary (Camera *camera, CameraText *summary, GPContext *context)
 			  gp_result_as_string (res));
 	}
 
-	canon_int_set_time (camera, time (NULL), context);
 	res = canon_int_get_time (camera, &camera_time, context);
 
 	/* it's hard to get local time with DST portably... */
