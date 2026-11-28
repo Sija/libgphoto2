@@ -2850,6 +2850,19 @@ canon_int_get_disk_name (Camera *camera, GPContext *context)
                                           "failed! returned %i", res);
                                 return NULL;
                         }
+                        /* the camera does not necessarily terminate the name */
+                        {
+                                unsigned char *name = realloc (msg, len + 1);
+
+                                if (name == NULL) {
+                                        GP_DEBUG ("canon_int_get_disk_name: could not allocate "
+                                                  "memory to hold response");
+                                        free (msg);
+                                        return NULL;
+                                }
+                                name[len] = '\0';
+                                msg = name;
+                        }
                         break;
                 case GP_PORT_SERIAL:
                         msg = canon_serial_dialogue (camera, context, 0x0a, 0x11, &len, NULL);
@@ -2862,13 +2875,20 @@ canon_int_get_disk_name (Camera *camera, GPContext *context)
                                 return NULL;    /* should be GP_ERROR_CORRUPTED_DATA */
 
                         /* this is correct even though it looks a bit funny. canon_serial_dialogue()
-                         * has a static buffer, strdup() part of that buffer and return to our caller.
+                         * has a static buffer, copy the name from that buffer and return it to
+                         * our caller. The name is not necessarily terminated within the response.
                          */
-                        msg = (unsigned char *)strdup ((char *)msg + 4);        /* @@@ should check length */
-                        if ( msg == NULL ) {
-                                GP_DEBUG ("canon_int_get_disk_name: could not allocate "
-                                          "memory to hold response");
-                                return NULL;
+                        {
+                                unsigned char *name = malloc (len - 4 + 1);
+
+                                if ( name == NULL ) {
+                                        GP_DEBUG ("canon_int_get_disk_name: could not allocate "
+                                                  "memory to hold response");
+                                        return NULL;
+                                }
+                                memcpy (name, msg + 4, len - 4);
+                                name[len - 4] = '\0';
+                                msg = name;
                         }
                         break;
                 GP_PORT_DEFAULT_RETURN (NULL)
@@ -2914,8 +2934,13 @@ canon_int_get_disk_name_info (Camera *camera, const char *name, int *capacity, i
                 case GP_PORT_USB:
                         if ( camera->pl->md->model == CANON_CLASS_6 ) {
                                 /* Newer protocol uses a different code, but with same response. */
-                                strncpy ( name_local, name, sizeof(name_local) );
-                                len = strlen(name_local);
+                                len = strlen (name);
+                                if ( len == 0 || len >= sizeof(name_local) ) {
+                                        GP_DEBUG ("canon_int_get_disk_name_info: "
+                                                  "invalid disk name '%s'", name);
+                                        return GP_ERROR_BAD_PARAMETERS;
+                                }
+                                memcpy ( name_local, name, len + 1 );
                                 if ( name_local[len-1] == '\\' )
                                         name_local[len-1] = 0;
                                 msg = canon_usb_dialogue (camera, CANON_USB_FUNCTION_DISK_INFO_2, &len,
