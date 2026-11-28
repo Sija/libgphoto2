@@ -1331,7 +1331,9 @@ canon_serial_ready (Camera *camera, GPContext *context)
 		gp_context_error (context, _("Unrecognized response"));
 		return GP_ERROR;
 	}
-	strncpy (cam_id_str, (char *)pkt + 26, sizeof (cam_id_str) - 1);
+	/* copy the identification string, but only from the frame received */
+	snprintf (cam_id_str, sizeof (cam_id_str), "%.*s",
+		  len > 26 ? len - 26 : 0, (char *)pkt + 26);
 
 	GP_DEBUG ("cam_id_str : '%s'", cam_id_str);
 
